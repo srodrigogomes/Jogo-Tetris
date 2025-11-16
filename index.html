@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris Infantil por Fases</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* Estilos Globais */
+        :root {
+            --cor-fundo-fase1: #87CEEB; /* Céu azul claro */
+            --cor-fundo-fase2-ceu: #87CEEB;
+            --cor-fundo-fase2-estrada: #b0b0b0; /* Cinza da estrada */
+            --cor-fundo-fase2-grama: #90EE90; /* Verde claro */
+            --cor-fundo-fase3: #1a237e; /* Noite azul escura */
+            
+            --cor-borda: #333;
+            --cor-texto: #1e1e1e;
+            --cor-painel: rgba(255, 255, 255, 0.7);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            color: var(--cor-texto);
+            transition: background-color 0.5s ease;
+        }
+
+        /* O contêiner principal do jogo que muda de fundo */
+        #game-container {
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            gap: 20px;
+            transition: background 0.8s ease-in-out;
+            position: relative;
+            overflow: hidden; /* Importante para os fundos SVG */
+        }
+
+        /* Estilos do Canvas do Jogo */
+        canvas {
+            border: 3px solid var(--cor-borda);
+            border-radius: 10px;
+            background-color: rgba(255, 255, 255, 0.4); /* Fundo semi-transparente */
+            display: block;
+        }
+
+        /* Painel de Informações (Pontos, Linhas, Fase) */
+        #info-panel {
+            width: 150px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .info-box {
+            background-color: var(--cor-painel);
+            border: 3px solid var(--cor-borda);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .info-box h3 {
+            font-size: 1.1em;
+            margin-bottom: 5px;
+            color: #555;
+        }
+
+        .info-box p {
+            font-size: 1.8em;
+            font-weight: 600;
+        }
+
+        /* --- Estilos de Fundo por Fase --- */
+
+        /* SVG da Nuvem (para Fase 1) */
+        .cloud {
+            position: absolute;
+            width: 150px;
+            height: 100px;
+            background: #fff;
+            border-radius: 50px;
+            opacity: 0.8;
+            z-index: -1;
+            animation: moveClouds 20s linear infinite;
+        }
+        .cloud::before, .cloud::after {
+            content: '';
+            position: absolute;
+            background: #fff;
+            border-radius: 50%;
+        }
+        .cloud::before {
+            width: 80px; height: 80px; top: -30px; left: 30px;
+        }
+        .cloud::after {
+            width: 60px; height: 60px; top: -20px; right: 20px;
+        }
+        #cloud1 { top: 10%; left: -150px; transform: scale(0.8); animation-duration: 25s; }
+        #cloud2 { top: 30%; left: -150px; transform: scale(1.1); animation-duration: 18s; animation-delay: -5s; }
+        #cloud3 { top: 60%; left: -150px; transform: scale(0.6); animation-duration: 30s; animation-delay: -10s; }
+
+        @keyframes moveClouds {
+            from { transform: translateX(0); }
+            to { transform: translateX(800px); } /* Move através do contêiner */
+        }
+
+        /* SVG do Sol (para Fase 2) */
+        .sun {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            background: #FFD700;
+            border-radius: 50%;
+            box-shadow: 0 0 20px #FFD700;
+            z-index: -1;
+            animation: pulseSun 3s infinite ease-in-out;
+            display: none; /* Oculto por padrão */
+        }
+        @keyframes pulseSun {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        /* Estrelas (para Fase 3) */
+        .star {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: #fff;
+            border-radius: 50%;
+            z-index: -1;
+            animation: twinkle 1.5s infinite ease-in-out alternate;
+            display: none; /* Oculto por padrão */
+        }
+        @keyframes twinkle {
+            from { opacity: 0.3; }
+            to { opacity: 1; }
+        }
+
+        /* FASE 1: Céu Limpo */
+        .fase-1 {
+            background-color: var(--cor-fundo-fase1);
+        }
+        .fase-1 .cloud { display: block; }
+        .fase-1 .sun, .fase-1 .star { display: none; }
+
+        /* FASE 2: Estrada e Sol */
+        .fase-2 {
+            /* Gradiente: céu, estrada, grama */
+            background: linear-gradient(
+                to bottom,
+                var(--cor-fundo-fase2-ceu) 0%,
+                var(--cor-fundo-fase2-ceu) 65%,
+                var(--cor-fundo-fase2-estrada) 65%,
+                var(--cor-fundo-fase2-estrada) 75%,
+                var(--cor-fundo-fase2-grama) 75%,
+                var(--cor-fundo-fase2-grama) 100%
+            );
+        }
+        .fase-2 .sun { display: block; }
+        .fase-2 .cloud, .fase-2 .star { display: none; }
+
+        /* FASE 3: Noite Estrelada */
+        .fase-3 {
+            background-color: var(--cor-fundo-fase3);
+        }
+        .fase-3 .star { display: block; }
+        .fase-3 .cloud, .fase-3 .sun { display: none; }
+
+        /* Modal de Fim de Jogo / Parabéns */
+        #modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: none; /* Oculto por padrão */
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        #modal-content {
+            background: #fff;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            animation: popIn 0.3s ease;
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        #modal-content h2 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+
+        #modal-content p {
+            font-size: 1.2em;
+            margin-bottom: 30px;
+        }
+
+        #modal-content button {
+            font-family: 'Fredoka', sans-serif;
+            font-size: 1.2em;
+            font-weight: 600;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 10px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #modal-content button:hover {
+            background-color: #45a049;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- Contêiner Principal do Jogo -->
+    <div id="game-container" class="fase-1">
+        
+        <!-- Elementos de Fundo (são movidos pelo JS/CSS) -->
+        <!-- Fase 1: Nuvens -->
+        <div class="cloud" id="cloud1"></div>
+        <div class="cloud" id="cloud2"></div>
+        <div class="cloud" id="cloud3"></div>
+        <!-- Fase 2: Sol -->
+        <div class="sun"></div>
+        <!-- Fase 3: Estrelas (geradas por JS) -->
+        <div id="star-container"></div>
+
+
+        <!-- Canvas do Jogo -->
+        <canvas id="tetris-canvas" width="300" height="600"></canvas>
+
+        <!-- Painel de Informações -->
+        <div id="info-panel">
+            <div class="info-box">
+                <h3>Pontos</h3>
+                <p id="score">0</p>
+            </div>
+            <div class="info-box">
+                <h3>Linhas</h3>
+                <p id="lines">0</p>
+            </div>
+            <div class="info-box">
+                <h3>Fase</h3>
+                <p id="fase">1</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Fim de Jogo / Parabéns -->
+    <div id="modal">
+        <div id="modal-content">
+            <h2 id="modal-title">Fim de Jogo!</h2>
+            <p id="modal-message">Tente novamente!</p>
+            <button id="restart-button">Jogar de Novo</button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Configuração Inicial ---
+
+        const canvas = document.getElementById('tetris-canvas');
+        const ctx = canvas.getContext('2d');
+        const COLS = 10;
+        const ROWS = 20;
+        const BLOCK_SIZE = 30;
+
+        // Elementos da UI
+        const scoreEl = document.getElementById('score');
+        const linesEl = document.getElementById('lines');
+        const faseEl = document.getElementById('fase');
+        const gameContainer = document.getElementById('game-container');
+        const starContainer = document.getElementById('star-container');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const restartButton = document.getElementById('restart-button');
+
+        // Cores das Peças (infantis e claras)
+        const COLORS = [
+            '#FFFFFF', // Cor 0 (vazio) - Trocada para branco para melhor contraste
+            '#FF69B4', // Rosa (I)
+            '#00BFFF', // Azul (J)
+            '#FFD700', // Amarelo (L)
+            '#ADFF2F', // Verde (O)
+            '#FF6347', // Vermelho/Tomate (S)
+            '#BA55D3', // Roxo (T)
+            '#FFA500'  // Laranja (Z)
+        ];
+
+        // Formas das Peças (Tetrominoes)
+        const SHAPES = [
+            [], // Vazio
+            [[1, 1, 1, 1]], // I
+            [[2, 0, 0], [2, 2, 2]], // J
+            [[0, 0, 3], [3, 3, 3]], // L
+            [[4, 4], [4, 4]], // O
+            [[0, 5, 5], [5, 5, 0]], // S
+            [[6, 6, 6], [0, 6, 0]], // T
+            [[7, 7, 0], [0, 7, 7]]  // Z
+        ];
+
+        // Variáveis de Estado do Jogo
+        let grid;
+        let currentPiece;
+        let score;
+        let linesCleared;
+        let fase;
+        let gameOver;
+        let dropInterval;
+        let dropCounter;
+        let lastTime;
+        let animationFrameId;
+        let congratsShown;
+
+        // --- Funções Principais do Jogo ---
+
+        /**
+         * Inicializa ou reinicia o jogo
+         */
+        function init() {
+            // Cria o grid vazio
+            grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+            
+            // Reseta o estado
+            score = 0;
+            linesCleared = 0;
+            fase = 1;
+            gameOver = false;
+            congratsShown = false;
+            dropInterval = 1000; // 1 segundo (Fase 1)
+            dropCounter = 0;
+            lastTime = 0;
+
+            // Gera as estrelas para a Fase 3 (mas deixa ocultas)
+            generateStars(50);
+            
+            // Atualiza a UI
+            updateUI();
+            updateBackground();
+
+            // Esconde o modal
+            modal.style.display = 'none';
+
+            // Gera a primeira peça
+            spawnPiece();
+
+            // Inicia o loop do jogo
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            gameLoop();
+        }
+
+        /**
+         * O loop principal do jogo (baseado em requestAnimationFrame)
+         */
+        function gameLoop(time = 0) {
+            if (gameOver) return;
+
+            const deltaTime = time - lastTime;
+            lastTime = time;
+            dropCounter += deltaTime;
+
+            // Acelera a queda se a seta para baixo estiver pressionada
+            if (isDownPressed) {
+                dropCounter += dropInterval; // Força uma queda
+                isDownPressed = false; // Reseta para não cair múltiplos blocos
+            }
+
+            if (dropCounter > dropInterval) {
+                pieceDrop();
+                dropCounter = 0;
+            }
+
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        /**
+         * Gera uma nova peça aleatória no topo
+         */
+        function spawnPiece() {
+            const shapeIndex = Math.floor(Math.random() * (SHAPES.length - 1)) + 1;
+            const shape = SHAPES[shapeIndex];
+            
+            currentPiece = {
+                x: Math.floor((COLS - shape[0].length) / 2),
+                y: 0,
+                shape: shape,
+                colorIndex: shapeIndex
+            };
+
+            // Verifica se o jogo acabou (colisão no spawn)
+            if (checkCollision(currentPiece.shape, currentPiece.x, currentPiece.y)) {
+                gameOver = true;
+                showModal("Fim de Jogo!", `Pontuação final: ${score}`);
+            }
+        }
+
+        // --- Funções de Movimentação e Colisão ---
+
+        /**
+         * Move a peça automaticamente para baixo (gravidade)
+         */
+        function pieceDrop() {
+            if (!checkCollision(currentPiece.shape, currentPiece.x, currentPiece.y + 1)) {
+                currentPiece.y++;
+            } else {
+                // A peça colidiu, solidifica ela no grid
+                solidifyPiece();
+                // Verifica se linhas foram completadas
+                clearLines();
+                // Gera a próxima peça
+                spawnPiece();
+            }
+        }
+
+        /**
+         * Move a peça horizontalmente
+         */
+        function move(dir) {
+            if (!checkCollision(currentPiece.shape, currentPiece.x + dir, currentPiece.y)) {
+                currentPiece.x += dir;
+            }
+        }
+
+        /**
+         * Rotaciona a peça
+         */
+        function rotate() {
+            const originalShape = currentPiece.shape;
+            const N = originalShape.length;
+            const M = originalShape[0].length;
+            
+            // Cria uma nova matriz transposta
+            const newShape = Array.from({ length: M }, () => Array(N).fill(0));
+            for (let r = 0; r < N; r++) {
+                for (let c = 0; c < M; c++) {
+                    newShape[c][N - 1 - r] = originalShape[r][c];
+                }
+            }
+
+            // Tenta aplicar a rotação (com "wall kick" simples)
+            let newX = currentPiece.x;
+            if (checkCollision(newShape, newX, currentPiece.y)) {
+                // Tenta mover 1 para a direita
+                if (!checkCollision(newShape, newX + 1, currentPiece.y)) {
+                    newX++;
+                } 
+                // Tenta mover 1 para a esquerda
+                else if (!checkCollision(newShape, newX - 1, currentPiece.y)) {
+                    newX--;
+                } 
+                // Tenta mover 2 para a direita (para a peça 'I')
+                else if (!checkCollision(newShape, newX + 2, currentPiece.y)) {
+                    newX += 2;
+                }
+                // Tenta mover 2 para a esquerda (para a peça 'I')
+                else if (!checkCollision(newShape, newX - 2, currentPiece.y)) {
+                    newX -= 2;
+                }
+                // Se ainda colidir, não rotaciona
+                else {
+                    return; 
+                }
+            }
+            
+            currentPiece.shape = newShape;
+            currentPiece.x = newX;
+        }
+
+        /**
+         * Verifica colisão da peça com os limites ou outras peças
+         */
+        function checkCollision(shape, newX, newY) {
+            for (let y = 0; y < shape.length; y++) {
+                for (let x = 0; x < shape[y].length; x++) {
+                    if (shape[y][x] !== 0) {
+                        const realX = newX + x;
+                        const realY = newY + y;
+
+                        // Verifica limites do grid
+                        if (realX < 0 || realX >= COLS || realY >= ROWS) {
+                            return true;
+                        }
+                        // Verifica se a célula do grid já está ocupada
+                        if (realY >= 0 && grid[realY][realX] !== 0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Fixa a peça no grid
+         */
+        function solidifyPiece() {
+            currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        grid[currentPiece.y + y][currentPiece.x + x] = value;
+                    }
+                });
+            });
+        }
+
+        /**
+         * Verifica e limpa linhas completas
+         */
+        function clearLines() {
+            let linesToClear = 0;
+            for (let r = ROWS - 1; r >= 0; r--) {
+                // Se a linha estiver cheia (nenhum '0')
+                if (grid[r].every(cell => cell !== 0)) {
+                    linesToClear++;
+                    // Remove a linha
+                    grid.splice(r, 1);
+                    // Adiciona uma linha vazia no topo
+                    grid.unshift(Array(COLS).fill(0));
+                    // Precisamos checar esta linha novamente (pois a de cima desceu)
+                    r++;
+                }
+            }
+
+            if (linesToClear > 0) {
+                linesCleared += linesToClear;
+                // Calcula pontuação (ex: 100 por linha, 800 por 4 linhas, etc.)
+                score += linesToClear * 100 * linesToClear; // Pontuação bônus
+                updateFase();
+                updateUI();
+            }
+        }
+
+        // --- Funções de UI e Nível ---
+
+        /**
+         * Atualiza os placares (Pontos, Linhas, Fase)
+         */
+        function updateUI() {
+            scoreEl.textContent = score;
+            linesEl.textContent = linesCleared;
+            faseEl.textContent = fase;
+        }
+
+        /**
+         * Verifica e atualiza a fase do jogo
+         */
+        function updateFase() {
+            let newFase = fase;
+
+            if (linesCleared >= 13) {
+                newFase = 3;
+                dropInterval = 400; // Fase 3: Rápido
+            } else if (linesCleared >= 6) {
+                newFase = 2;
+                dropInterval = 700; // Fase 2: Médio
+            } else {
+                newFase = 1;
+                dropInterval = 1000; // Fase 1: Normal
+            }
+
+            // Verifica se a fase mudou
+            if (newFase !== fase) {
+                fase = newFase;
+                updateBackground();
+            }
+            
+            // Condição de "Parabéns" (ex: ao atingir 20 linhas)
+            if (linesCleared >= 20 && !congratsShown) {
+                congratsShown = true;
+                gameOver = true;
+                showModal("Parabéns!", "Você zerou todas as fases!");
+            }
+        }
+
+        /**
+         * Atualiza a classe do contêiner para mudar o fundo
+         */
+        function updateBackground() {
+            gameContainer.classList.remove('fase-1', 'fase-2', 'fase-3');
+            gameContainer.classList.add('fase-' + fase);
+        }
+
+        /**
+         * Gera as estrelas para a Fase 3
+         */
+        function generateStars(count) {
+            starContainer.innerHTML = ''; // Limpa estrelas antigas
+            const containerWidth = gameContainer.offsetWidth;
+            const containerHeight = gameContainer.offsetHeight;
+
+            for (let i = 0; i < count; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.top = `${Math.random() * containerHeight}px`;
+                star.style.left = `${Math.random() * containerWidth}px`;
+                star.style.animationDelay = `${Math.random() * 1.5}s`;
+                star.style.transform = `scale(${Math.random() * 1.5 + 0.5})`;
+                starContainer.appendChild(star);
+            }
+        }
+
+        /**
+         * Exibe o modal de fim de jogo ou parabéns
+         */
+        function showModal(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.style.display = 'flex';
+        }
+
+        // --- Funções de Desenho ---
+
+        /**
+         * Limpa e desenha o estado atual do jogo no canvas
+         */
+        function draw() {
+            // Limpa o canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Desenha o grid (peças solidificadas)
+            drawGrid();
+
+            // Desenha a peça atual
+            drawPiece(currentPiece);
+        }
+
+        /**
+         * Desenha o grid (peças que já caíram)
+         */
+        function drawGrid() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (grid[r][c] !== 0) {
+                        drawBlock(c, r, COLORS[grid[r][c]]);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Desenha a peça que está caindo
+         */
+        function drawPiece(piece) {
+            const color = COLORS[piece.colorIndex];
+            piece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        drawBlock(piece.x + x, piece.y + y, color);
+                    }
+                });
+            });
+        }
+
+        /**
+         * Função auxiliar para desenhar um único bloco
+         */
+        function drawBlock(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            // Adiciona uma borda interna para dar visual de "bloco"
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x * BLOCK_SIZE + 1, y * BLOCK_SIZE + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
+        }
+
+        // --- Controles de Teclado ---
+
+        let isDownPressed = false; // Flag para a seta para baixo
+
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+
+            if (e.key === 'ArrowLeft') {
+                move(-1);
+            } else if (e.key === 'ArrowRight') {
+                move(1);
+            } else if (e.key === 'ArrowDown') {
+                // Acelera a queda no loop do jogo
+                isDownPressed = true;
+            } else if (e.key === 'ArrowUp') {
+                rotate();
+            }
+        });
+
+        // Event listener para o botão de reiniciar
+        restartButton.addEventListener('click', init);
+
+        // --- Iniciar o Jogo ---
+        init();
+
+    </script>
+</body>
+</html>
