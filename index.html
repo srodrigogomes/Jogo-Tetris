@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tetris Infantil por Fases</title>
+    <title>Tetris Infantil com Poderes</title>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         /* Estilos Globais */
@@ -17,6 +17,7 @@
             --cor-borda: #333;
             --cor-texto: #1e1e1e;
             --cor-painel: rgba(255, 255, 255, 0.7);
+            --cor-poder: #fff2a8;
         }
 
         * {
@@ -46,6 +47,16 @@
             position: relative;
             overflow: hidden; /* Importante para os fundos SVG */
         }
+        
+        /* Efeito de piscar ao mudar de fase */
+        .fase-change-flash {
+            animation: flash 0.5s ease-out;
+        }
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
 
         /* Estilos do Canvas do Jogo */
         canvas {
@@ -53,6 +64,12 @@
             border-radius: 10px;
             background-color: rgba(255, 255, 255, 0.4); /* Fundo semi-transparente */
             display: block;
+            transition: filter 0.3s ease;
+        }
+
+        /* Efeito de Câmera Lenta */
+        .slow-mo {
+            filter: hue-rotate(60deg) saturate(1.5);
         }
 
         /* Painel de Informações (Pontos, Linhas, Fase) */
@@ -70,6 +87,17 @@
             padding: 15px;
             text-align: center;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Caixa de poder especial */
+        .power-box {
+            background-color: var(--cor-poder);
+        }
+        .power-box h3 {
+            color: #b8860b;
+        }
+        .power-box p {
+            color: #d9534f;
         }
 
         .info-box h3 {
@@ -271,6 +299,11 @@
                 <h3>Fase</h3>
                 <p id="fase">1</p>
             </div>
+            <!-- Novo Painel de Poder -->
+            <div class="info-box power-box">
+                <h3>Poder</h3>
+                <p id="power-status">---</p>
+            </div>
         </div>
     </div>
 
@@ -297,6 +330,7 @@
         const scoreEl = document.getElementById('score');
         const linesEl = document.getElementById('lines');
         const faseEl = document.getElementById('fase');
+        const powerStatusEl = document.getElementById('power-status'); // Novo
         const gameContainer = document.getElementById('game-container');
         const starContainer = document.getElementById('star-container');
         const modal = document.getElementById('modal');
@@ -306,26 +340,32 @@
 
         // Cores das Peças (infantis e claras)
         const COLORS = [
-            '#FFFFFF', // Cor 0 (vazio) - Trocada para branco para melhor contraste
-            '#FF69B4', // Rosa (I)
-            '#00BFFF', // Azul (J)
-            '#FFD700', // Amarelo (L)
-            '#ADFF2F', // Verde (O)
-            '#FF6347', // Vermelho/Tomate (S)
-            '#BA55D3', // Roxo (T)
-            '#FFA500'  // Laranja (Z)
+            '#FFFFFF', // Cor 0 (vazio)
+            '#FF69B4', // 1: Rosa (I)
+            '#00BFFF', // 2: Azul (J)
+            '#FFD700', // 3: Amarelo (L)
+            '#ADFF2F', // 4: Verde (O)
+            '#FF6347', // 5: Vermelho/Tomate (S)
+            '#BA55D3', // 6: Roxo (T)
+            '#FFA500',  // 7: Laranja (Z)
+            // --- Cores Especiais ---
+            '#333333', // 8: Bomba (será animada)
+            '#FFFFFF'  // 9: Laser (será animada)
         ];
 
         // Formas das Peças (Tetrominoes)
         const SHAPES = [
             [], // Vazio
-            [[1, 1, 1, 1]], // I
-            [[2, 0, 0], [2, 2, 2]], // J
-            [[0, 0, 3], [3, 3, 3]], // L
-            [[4, 4], [4, 4]], // O
-            [[0, 5, 5], [5, 5, 0]], // S
-            [[6, 6, 6], [0, 6, 0]], // T
-            [[7, 7, 0], [0, 7, 7]]  // Z
+            [[1, 1, 1, 1]], // 1: I
+            [[2, 0, 0], [2, 2, 2]], // 2: J
+            [[0, 0, 3], [3, 3, 3]], // 3: L
+            [[4, 4], [4, 4]], // 4: O
+            [[0, 5, 5], [5, 5, 0]], // 5: S
+            [[6, 6, 6], [0, 6, 0]], // 6: T
+            [[7, 7, 0], [0, 7, 7]], // 7: Z
+            // --- Peças Especiais ---
+            [[8]] // 8: Bomba (1x1)
+            // O Laser é a peça 'I' (1) com uma flag
         ];
 
         // Variáveis de Estado do Jogo
@@ -335,11 +375,16 @@
         let linesCleared;
         let fase;
         let gameOver;
-        let dropInterval;
+        let dropInterval;       // Velocidade atual (muda com fases e slow-mo)
+        let baseDropInterval;   // Velocidade da fase atual
         let dropCounter;
         let lastTime;
         let animationFrameId;
         let congratsShown;
+
+        // Variáveis dos Poderes
+        let slowMoActive = false;
+        let slowMoTimer = 0;
 
         // --- Funções Principais do Jogo ---
 
@@ -347,33 +392,29 @@
          * Inicializa ou reinicia o jogo
          */
         function init() {
-            // Cria o grid vazio
             grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-            
-            // Reseta o estado
             score = 0;
             linesCleared = 0;
             fase = 1;
             gameOver = false;
             congratsShown = false;
-            dropInterval = 1000; // 1 segundo (Fase 1)
+            baseDropInterval = 1000; // 1 segundo (Fase 1)
+            dropInterval = baseDropInterval;
             dropCounter = 0;
             lastTime = 0;
 
-            // Gera as estrelas para a Fase 3 (mas deixa ocultas)
+            // Reseta poderes
+            deactivateSlowMo(true); // Reseta forçado
+            powerStatusEl.textContent = "---";
+            canvas.classList.remove('slow-mo');
+
             generateStars(50);
-            
-            // Atualiza a UI
             updateUI();
             updateBackground();
-
-            // Esconde o modal
             modal.style.display = 'none';
 
-            // Gera a primeira peça
             spawnPiece();
 
-            // Inicia o loop do jogo
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
             }
@@ -390,10 +431,19 @@
             lastTime = time;
             dropCounter += deltaTime;
 
+            // Gerencia o timer da Câmera Lenta
+            if (slowMoActive) {
+                slowMoTimer -= deltaTime;
+                powerStatusEl.textContent = `Lento! ${Math.ceil(slowMoTimer / 1000)}s`;
+                if (slowMoTimer <= 0) {
+                    deactivateSlowMo();
+                }
+            }
+
             // Acelera a queda se a seta para baixo estiver pressionada
             if (isDownPressed) {
                 dropCounter += dropInterval; // Força uma queda
-                isDownPressed = false; // Reseta para não cair múltiplos blocos
+                isDownPressed = false; 
             }
 
             if (dropCounter > dropInterval) {
@@ -409,14 +459,29 @@
          * Gera uma nova peça aleatória no topo
          */
         function spawnPiece() {
-            const shapeIndex = Math.floor(Math.random() * (SHAPES.length - 1)) + 1;
+            let shapeIndex;
+            let isLaser = false;
+
+            // Chance de 7% de ser uma Bomba
+            if (Math.random() < 0.07) {
+                shapeIndex = 8; // Bomba
+            } else {
+                shapeIndex = Math.floor(Math.random() * 7) + 1; // Peças normais (1-7)
+            }
+            
             const shape = SHAPES[shapeIndex];
             
+            // Se for uma peça 'I' (índice 1), 15% de chance de ser Laser
+            if (shapeIndex === 1 && Math.random() < 0.15) {
+                isLaser = true;
+            }
+
             currentPiece = {
                 x: Math.floor((COLS - shape[0].length) / 2),
                 y: 0,
                 shape: shape,
-                colorIndex: shapeIndex
+                colorIndex: isLaser ? 9 : shapeIndex, // Cor 9 para Laser
+                isLaser: isLaser
             };
 
             // Verifica se o jogo acabou (colisão no spawn)
@@ -435,33 +500,39 @@
             if (!checkCollision(currentPiece.shape, currentPiece.x, currentPiece.y + 1)) {
                 currentPiece.y++;
             } else {
-                // A peça colidiu, solidifica ela no grid
-                solidifyPiece();
-                // Verifica se linhas foram completadas
+                // A peça colidiu. Verifica se é um poder antes de solidificar
+                if (currentPiece.colorIndex === 8) { // É Bomba!
+                    activateBomb(currentPiece.x, currentPiece.y);
+                } else if (currentPiece.isLaser) { // É Laser!
+                    activateLaser();
+                } else {
+                    // Peça normal, solidifica
+                    solidifyPiece();
+                }
+                
+                // Verifica se linhas foram completadas (mesmo após poderes)
                 clearLines();
                 // Gera a próxima peça
                 spawnPiece();
             }
         }
 
-        /**
-         * Move a peça horizontalmente
-         */
         function move(dir) {
+            // ... (código original sem mudanças) ...
             if (!checkCollision(currentPiece.shape, currentPiece.x + dir, currentPiece.y)) {
                 currentPiece.x += dir;
             }
         }
 
-        /**
-         * Rotaciona a peça
-         */
         function rotate() {
+            // ... (código original sem mudanças) ...
             const originalShape = currentPiece.shape;
+            // Não deixa rotacionar Bomba ou peça 'O'
+            if (currentPiece.colorIndex === 8 || currentPiece.colorIndex === 4) return;
+            
             const N = originalShape.length;
             const M = originalShape[0].length;
             
-            // Cria uma nova matriz transposta
             const newShape = Array.from({ length: M }, () => Array(N).fill(0));
             for (let r = 0; r < N; r++) {
                 for (let c = 0; c < M; c++) {
@@ -469,26 +540,20 @@
                 }
             }
 
-            // Tenta aplicar a rotação (com "wall kick" simples)
             let newX = currentPiece.x;
             if (checkCollision(newShape, newX, currentPiece.y)) {
-                // Tenta mover 1 para a direita
                 if (!checkCollision(newShape, newX + 1, currentPiece.y)) {
                     newX++;
                 } 
-                // Tenta mover 1 para a esquerda
                 else if (!checkCollision(newShape, newX - 1, currentPiece.y)) {
                     newX--;
                 } 
-                // Tenta mover 2 para a direita (para a peça 'I')
                 else if (!checkCollision(newShape, newX + 2, currentPiece.y)) {
                     newX += 2;
                 }
-                // Tenta mover 2 para a esquerda (para a peça 'I')
                 else if (!checkCollision(newShape, newX - 2, currentPiece.y)) {
                     newX -= 2;
                 }
-                // Se ainda colidir, não rotaciona
                 else {
                     return; 
                 }
@@ -498,21 +563,17 @@
             currentPiece.x = newX;
         }
 
-        /**
-         * Verifica colisão da peça com os limites ou outras peças
-         */
         function checkCollision(shape, newX, newY) {
+            // ... (código original sem mudanças) ...
             for (let y = 0; y < shape.length; y++) {
                 for (let x = 0; x < shape[y].length; x++) {
                     if (shape[y][x] !== 0) {
                         const realX = newX + x;
                         const realY = newY + y;
 
-                        // Verifica limites do grid
                         if (realX < 0 || realX >= COLS || realY >= ROWS) {
                             return true;
                         }
-                        // Verifica se a célula do grid já está ocupada
                         if (realY >= 0 && grid[realY][realX] !== 0) {
                             return true;
                         }
@@ -522,10 +583,8 @@
             return false;
         }
 
-        /**
-         * Fixa a peça no grid
-         */
         function solidifyPiece() {
+            // ... (código original sem mudanças) ...
             currentPiece.shape.forEach((row, y) => {
                 row.forEach((value, x) => {
                     if (value !== 0) {
@@ -541,33 +600,104 @@
         function clearLines() {
             let linesToClear = 0;
             for (let r = ROWS - 1; r >= 0; r--) {
-                // Se a linha estiver cheia (nenhum '0')
                 if (grid[r].every(cell => cell !== 0)) {
                     linesToClear++;
-                    // Remove a linha
                     grid.splice(r, 1);
-                    // Adiciona uma linha vazia no topo
                     grid.unshift(Array(COLS).fill(0));
-                    // Precisamos checar esta linha novamente (pois a de cima desceu)
                     r++;
                 }
             }
 
             if (linesToClear > 0) {
                 linesCleared += linesToClear;
-                // Calcula pontuação (ex: 100 por linha, 800 por 4 linhas, etc.)
-                score += linesToClear * 100 * linesToClear; // Pontuação bônus
+                score += linesToClear * 100 * linesToClear; 
+                
+                // ATIVA CÂMERA LENTA (se limpar 2+ linhas)
+                if (linesToClear >= 2 && !slowMoActive) {
+                    activateSlowMo();
+                }
+                
                 updateFase();
                 updateUI();
             }
         }
+        
+        // --- Funções dos PODERES ---
+
+        /**
+         * PODER: Ativa o Bloco-Bomba (limpa 3x3)
+         */
+        function activateBomb(x, y) {
+            score += 50; // Pontos bônus pela bomba
+            for (let r = y - 1; r <= y + 1; r++) {
+                for (let c = x - 1; c <= x + 1; c++) {
+                    // Verifica se está dentro dos limites do grid
+                    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                        grid[r][c] = 0; // Limpa o bloco
+                    }
+                }
+            }
+        }
+        
+        /**
+         * PODER: Ativa o Laser de Coluna
+         */
+        function activateLaser() {
+            const shape = currentPiece.shape;
+            const x = currentPiece.x;
+            
+            // Descobre quais colunas o laser ocupa
+            let colsToClear = new Set();
+            shape.forEach((row, y) => {
+                row.forEach((value, c) => {
+                    if (value !== 0) {
+                        colsToClear.add(x + c);
+                    }
+                });
+            });
+
+            // Limpa as colunas
+            colsToClear.forEach(col => {
+                for (let r = 0; r < ROWS; r++) {
+                    if (grid[r][col] !== 0) {
+                        grid[r][col] = 0;
+                        score += 10; // Pontos por bloco destruído
+                    }
+                }
+            });
+        }
+        
+        /**
+         * PODER: Ativa a Câmera Lenta
+         */
+        function activateSlowMo() {
+            slowMoActive = true;
+            slowMoTimer = 7000; // 7 segundos
+            // Salva a velocidade da fase ATUAL, para não bugar
+            baseDropInterval = dropInterval; 
+            dropInterval = 1500; // Super lento
+            canvas.classList.add('slow-mo');
+        }
+
+        /**
+         * PODER: Desativa a Câmera Lenta
+         */
+        function deactivateSlowMo(forceReset = false) {
+            if (forceReset || slowMoActive) {
+                slowMoActive = false;
+                slowMoTimer = 0;
+                // Restaura a velocidade da fase (que está em baseDropInterval)
+                dropInterval = baseDropInterval;
+                powerStatusEl.textContent = "---";
+                canvas.classList.remove('slow-mo');
+            }
+        }
+
 
         // --- Funções de UI e Nível ---
 
-        /**
-         * Atualiza os placares (Pontos, Linhas, Fase)
-         */
         function updateUI() {
+            // ... (código original sem mudanças) ...
             scoreEl.textContent = score;
             linesEl.textContent = linesCleared;
             faseEl.textContent = fase;
@@ -578,47 +708,60 @@
          */
         function updateFase() {
             let newFase = fase;
+            let newInterval = baseDropInterval; // Começa com o intervalo atual
 
             if (linesCleared >= 13) {
                 newFase = 3;
-                dropInterval = 400; // Fase 3: Rápido
+                newInterval = 400; // Fase 3: Rápido
             } else if (linesCleared >= 6) {
                 newFase = 2;
-                dropInterval = 700; // Fase 2: Médio
+                newInterval = 700; // Fase 2: Médio
             } else {
                 newFase = 1;
-                dropInterval = 1000; // Fase 1: Normal
+                newInterval = 1000; // Fase 1: Normal
             }
 
             // Verifica se a fase mudou
             if (newFase !== fase) {
                 fase = newFase;
                 updateBackground();
+                // Efeito de piscar
+                gameContainer.classList.add('fase-change-flash');
+                setTimeout(() => {
+                    gameContainer.classList.remove('fase-change-flash');
+                }, 500);
+            }
+            
+            // Atualiza a velocidade base
+            baseDropInterval = newInterval;
+            // Se a câmera lenta NÃO estiver ativa, aplica a nova velocidade
+            if (!slowMoActive) {
+                dropInterval = baseDropInterval;
             }
             
             // Condição de "Parabéns" (ex: ao atingir 20 linhas)
             if (linesCleared >= 20 && !congratsShown) {
+                // ... (código original sem mudanças) ...
                 congratsShown = true;
                 gameOver = true;
                 showModal("Parabéns!", "Você zerou todas as fases!");
             }
         }
 
-        /**
-         * Atualiza a classe do contêiner para mudar o fundo
-         */
         function updateBackground() {
+            // ... (código original sem mudanças) ...
             gameContainer.classList.remove('fase-1', 'fase-2', 'fase-3');
             gameContainer.classList.add('fase-' + fase);
         }
 
-        /**
-         * Gera as estrelas para a Fase 3
-         */
         function generateStars(count) {
-            starContainer.innerHTML = ''; // Limpa estrelas antigas
+            // ... (código original sem mudanças) ...
+            starContainer.innerHTML = ''; 
             const containerWidth = gameContainer.offsetWidth;
             const containerHeight = gameContainer.offsetHeight;
+
+            // Evita erro se o container não tiver tamanho na primeira execução
+            if (containerWidth === 0 || containerHeight === 0) return;
 
             for (let i = 0; i < count; i++) {
                 const star = document.createElement('div');
@@ -631,10 +774,8 @@
             }
         }
 
-        /**
-         * Exibe o modal de fim de jogo ou parabéns
-         */
         function showModal(title, message) {
+            // ... (código original sem mudanças) ...
             modalTitle.textContent = title;
             modalMessage.textContent = message;
             modal.style.display = 'flex';
@@ -646,12 +787,9 @@
          * Limpa e desenha o estado atual do jogo no canvas
          */
         function draw() {
-            // Limpa o canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
             // Desenha o grid (peças solidificadas)
             drawGrid();
-
             // Desenha a peça atual
             drawPiece(currentPiece);
         }
@@ -663,7 +801,7 @@
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     if (grid[r][c] !== 0) {
-                        drawBlock(c, r, COLORS[grid[r][c]]);
+                        drawBlock(c, r, grid[r][c]); // Passa o índice da cor
                     }
                 }
             }
@@ -673,23 +811,34 @@
          * Desenha a peça que está caindo
          */
         function drawPiece(piece) {
-            const color = COLORS[piece.colorIndex];
             piece.shape.forEach((row, y) => {
                 row.forEach((value, x) => {
                     if (value !== 0) {
-                        drawBlock(piece.x + x, piece.y + y, color);
+                        // 'value' aqui é o índice da cor (1-9)
+                        drawBlock(piece.x + x, piece.y + y, value);
                     }
                 });
             });
         }
 
         /**
-         * Função auxiliar para desenhar um único bloco
+         * Função auxiliar para desenhar um único bloco (COM EFEITOS)
          */
-        function drawBlock(x, y, color) {
+        function drawBlock(x, y, colorIndex) {
+            let color = COLORS[colorIndex];
+
+            // Efeito da Bomba (pisca entre preto e vermelho)
+            if (colorIndex === 8) {
+                color = (Math.floor(lastTime / 200) % 2 === 0) ? '#333' : '#FF0000';
+            } 
+            // Efeito do Laser (pulsa entre branco e azul)
+            else if (colorIndex === 9) {
+                color = (Math.floor(lastTime / 150) % 2 === 0) ? '#FFFFFF' : '#00BFFF';
+            }
+
             ctx.fillStyle = color;
             ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-            // Adiciona uma borda interna para dar visual de "bloco"
+            
             ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
             ctx.lineWidth = 2;
             ctx.strokeRect(x * BLOCK_SIZE + 1, y * BLOCK_SIZE + 1, BLOCK_SIZE - 2, BLOCK_SIZE - 2);
@@ -697,7 +846,7 @@
 
         // --- Controles de Teclado ---
 
-        let isDownPressed = false; // Flag para a seta para baixo
+        let isDownPressed = false; 
 
         document.addEventListener('keydown', (e) => {
             if (gameOver) return;
@@ -707,7 +856,6 @@
             } else if (e.key === 'ArrowRight') {
                 move(1);
             } else if (e.key === 'ArrowDown') {
-                // Acelera a queda no loop do jogo
                 isDownPressed = true;
             } else if (e.key === 'ArrowUp') {
                 rotate();
